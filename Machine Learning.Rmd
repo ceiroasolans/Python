@@ -1,0 +1,235 @@
+---
+title: "Machine Learning"
+output: html_document
+---
+
+Goal: Use keras to build a simple neural network that predicts the flower species from other info
+
+
+#Load and prepare data
+```{r}
+library(keras)
+library(carData)
+
+#Load data
+data <- iris
+
+plot(data$Petal.Length,data$Petal.Width, pch = 21, bg=c("red","green3","blue")[iris$Species])
+
+#Prepare data (normalize [0-1] and all numeric)
+
+normalize <- function(x) {    
+  num <- x - min(x)
+  denom <- max(x) - min(x)
+  return (num/denom)}
+
+Normiris <- as.data.frame(sapply(iris[,1:4], normalize)) 
+Normiris <- cbind(Normiris,iris[,5])
+Normiris[,5] <- as.numeric(Normiris[,5])
+Normiris <- as.matrix(Normiris)
+```
+
+```{r prep training & test sets}
+#Random index to  divide training set vs test set
+n <- sample(2, nrow(Normiris), replace=TRUE, prob=c(0.67, 0.33))
+iristrain <- Normiris[n == 1,1:4]
+iristest <- Normiris[n == 2,1:4]
+
+#Extract the species name into a different dataset 
+iristraintarget <- Normiris[n == 1, 5]
+iristesttarget <- Normiris[n == 2, 5]
+
+#Dummy variables for each level
+iris.trainlabels <- to_categorical(iristraintarget)
+iris.testlabels<- to_categorical(iristesttarget)
+
+#Remove extra column from both
+iris.trainlabels <- iris.trainlabels[,2:4]
+iris.testlabels <- iris.testlabels[,2:4]
+
+```
+
+
+
+
+  
+```{r}
+#Build model
+irismodel <- keras_model_sequential() #initialize
+
+irismodel %>% 
+    layer_dense(units = 8, activation = 'relu', input_shape = c(4)) %>% 
+    layer_dense(units = 3, activation = 'softmax')
+
+summary(irismodel)
+```
+Keras settings: 
+  layer_dense = layer. Last specifies the output levels (possible outcomes)
+  input_shape = predictors. 
+  nits = 'nodes'. 
+  activation = function from layer to layer. 
+  
+  
+```{r}
+#Compile and fit the model
+irismodel %>% 
+  compile( loss = 'categorical_crossentropy', #e.g.2 binary_crossentropy
+     optimizer = 'adam', #e.g.2 = sgd
+     metrics = 'accuracy'
+  )
+
+
+# Fit the model 
+firstrun <- irismodel %>% fit(
+     iristrain, #training data
+     iris.trainlabels, #training labels
+     epochs = 200, 
+     batch_size = 5, 
+     validation_split = 0.2,
+     verbose = 1
+ )
+
+#Plot of first fit
+plot(firstrun)
+```
+
+Compile: 
+#Loss: determines the kind of estimates. E.g. categorical, binary etc. Goal is to 'minimize' the loss.
+#Optimizer: guides loss function. How and when to optimize (weight variables differently etc)
+#Metrics = "accuracy" gives us classification accuracy data. (binary; right or wrong)
+
+Fit: 
+#batch_size: number of samples run at once; more is less accurate but faster
+#Validation split: proportion of training vs validation data (subset of training used to check)
+
+
+```{r}
+#Testing the model
+
+  #Evaluate loss and accuracy. 
+  predictionscore <- irismodel %>% evaluate(iristest, iris.testlabels, batch_size = 128)
+  print(predictionscore)
+
+  #Make predictions
+  predictions <- irismodel %>% predict_classes(iristest, batch_size = 128)
+
+  #Plot confusion matrix to compare predictions vs correct classifications
+  table(iristesttarget, predictions)
+```
+
+
+
+
+
+#Three ways to optimize our model
+  1. adding layers 
+  2. adding units 
+  3. optimization parameters
+
+
+
+#1. More layers
+```{r adding layers }
+#Initialize
+model <- keras_model_sequential() 
+
+#Build
+model %>% 
+    layer_dense(units = 8, activation = 'relu', input_shape = c(4)) %>% 
+    layer_dense(units = 8, activation = 'relu') %>% 
+    layer_dense(units = 3, activation = 'softmax')
+
+#Compile
+model %>% compile(
+     loss = 'categorical_crossentropy',
+     optimizer = 'adam',
+     metrics = 'accuracy'
+ )
+
+#Fit
+model %>% fit(
+     iristrain, 
+     iris.trainlabels, 
+     epochs = 200,
+     batch_size = 5, 
+     validation_split = 0.2
+ )
+
+# Evaluate the model
+score <- model %>% evaluate(iristest, iris.testlabels, batch_size = 128)
+print(score)
+
+```
+
+#2. More "hidden" units
+```{r}
+
+#Initialize
+model <- keras_model_sequential() 
+
+#Build
+model %>% 
+    layer_dense(units = 28, activation = 'relu', input_shape = c(4)) %>% #units here 
+    layer_dense(units = 3, activation = 'softmax')
+
+#Compile
+model %>% compile(
+     loss = 'categorical_crossentropy',
+     optimizer = 'adam',
+     metrics = 'accuracy'
+ )
+
+#Fit
+model %>% fit(
+     iristrain, iris.trainlabels, 
+     epochs = 200, batch_size = 5, 
+     validation_split = 0.2
+ )
+
+#Evaluate 
+score <- model %>% evaluate(iristest, iris.testlabels, batch_size = 128)
+print(score)
+```
+
+
+#3. Change optimizer
+```{r}
+#Initialize
+model <- keras_model_sequential() 
+
+#Build
+model %>% 
+    layer_dense(units = 8, activation = 'relu', input_shape = c(4)) %>% 
+    layer_dense(units = 3, activation = 'softmax')
+
+sgd <- optimizer_sgd(lr = 0.1, momentum = 0.9) #manual optimizer. 
+
+
+#Compile
+model %>% compile(optimizer=sgd, # new optimizer
+                  loss='categorical_crossentropy', 
+                  metrics='accuracy')
+
+# Fit the model to the training data
+model %>% fit(
+     iristrain, 
+     iris.trainlabels, 
+     epochs = 200, 
+     batch_size = 5, 
+     validation_split = 0.2
+ )
+
+# Evaluate the model
+score <- model %>% evaluate(iristest, iris.testlabels, batch_size = 128)
+print(score)
+```
+
+Manual optimizer: 
+  learn rate = size of weight changes that we make to variables. Primary. 
+      Big = skips over optimum weights
+      Small = false minumums (bad optimization + slower)
+      0.01 = standard; 0.1 = moderate 
+  momentum: 'smooths' optimization. Secondary. 
+  
+  
+  
